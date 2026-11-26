@@ -1,8 +1,8 @@
-from http import HTTPStatus
 import logging
 import os
 import sys
 import time
+from http import HTTPStatus
 
 import requests
 import vk_api
