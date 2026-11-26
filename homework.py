@@ -1,3 +1,4 @@
+from http import HTTPStatus
 import logging
 import os
 import sys
@@ -18,6 +19,7 @@ RETRY_PERIOD = 600
 ENDPOINT = "https://practicum.yandex.ru/api/user_api/homework_statuses/"
 HEADERS = {"Authorization": f"OAuth {PRACTICUM_TOKEN}"}
 
+ONE_MONTH_IN_SECONDS = 2592000
 
 HOMEWORK_VERDICTS = {
     "approved": "Работа проверена: ревьюеру всё понравилось. Ура!",
@@ -50,13 +52,13 @@ def check_tokens():
     missing_tokens = [name for name, value in tokens.items() if not value]
 
     if missing_tokens:
-        for name in missing_tokens:
-            logger.critical(
-                f"Отсутствует обязательная переменная окружения: {name}"
-            )
-        logger.critical("Программа принудительно остановлена.")
-        return False
-    return True
+        missing_str = ", ".join(missing_tokens)
+        logger.error(
+            "Отсутствуют обязательные переменные окружения: %s",
+            missing_str
+        )
+
+    return missing_tokens
 
 
 def send_message(vk, message):
@@ -67,9 +69,9 @@ def send_message(vk, message):
             message=message,
             random_id=int(time.time() * 1000)
         )
-        logger.debug(f'Бот отправил сообщение "{message}"')
-    except Exception as e:
-        logger.error(f"Сбой при отправке сообщения в VK: {e}")
+        logger.debug('Бот отправил сообщение "%s"', message)
+    except Exception as error:
+        logger.error("Сбой при отправке сообщения в VK: %s", error)
 
 
 def get_api_answer(timestamp):
@@ -81,7 +83,7 @@ def get_api_answer(timestamp):
     except requests.RequestException as e:
         raise ApiError(f"Ошибка при запросе к API: {e}")
 
-    if response.status_code != 200:
+    if response.status_code != HTTPStatus.OK:
         raise ApiError(
             f"Эндпоинт {ENDPOINT} недоступен. "
             f"Код ответа API: {response.status_code}"
@@ -130,14 +132,17 @@ def parse_status(homework):
 
 def main():
     """Основная логика работы бота."""
-    if not check_tokens():
+    if missing_tokens := check_tokens():
+        logger.critical(
+            "Программа принудительно остановлена. Отсутствуют: %s",
+            missing_tokens
+        )
         sys.exit(1)
 
-    # Инициализация VK API через библиотеку
     vk_session = vk_api.VkApi(token=VK_TOKEN)
     vk = vk_session.get_api()
 
-    timestamp = int(time.time()) - 2592000  # Месяц назад для теста
+    timestamp = int(time.time()) - ONE_MONTH_IN_SECONDS
     last_error_message = None
 
     while True:
